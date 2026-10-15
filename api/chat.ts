@@ -9,6 +9,7 @@ import {
   parseBody,
   errorToString,
 } from './_kb';
+import { CHAT_MODELS, CHAT_META_MODEL, supportsThinking } from '../src/config/aiModels';
 
 export const config = { maxDuration: 30 };
 
@@ -95,7 +96,7 @@ export default async function handler(req: any, res: any) {
     contents.push({ role: 'user', parts });
 
     let replyText = '';
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    const modelsToTry = CHAT_MODELS;
 
     for (const modelName of modelsToTry) {
       try {
@@ -106,7 +107,7 @@ export default async function handler(req: any, res: any) {
           systemInstruction: buildSystemInstruction() + roleAugmentation,
           temperature: 0.3,
         };
-        if (modelName.startsWith('gemini-3') || modelName.startsWith('gemini-4')) {
+        if (supportsThinking(modelName)) {
           modelConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
         }
         const callPromise = ai.models.generateContent({ model: modelName, contents, config: modelConfig });
@@ -123,7 +124,7 @@ export default async function handler(req: any, res: any) {
     }
 
     return ok(replyText, {
-      model: 'gemini-3.8-flash',
+      model: CHAT_META_MODEL,
       reference: 'MAR-KB-001',
       source: 'Maritime Operations Knowledge Base',
       timestamp: new Date().toISOString(),

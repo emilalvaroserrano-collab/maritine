@@ -4,6 +4,7 @@
  */
 import { GoogleGenAI } from '@google/genai';
 import { parseBody, errorToString } from './_kb';
+import { TTS_MODELS, TTS_VOICE } from '../src/config/aiModels';
 
 export const config = { maxDuration: 30 };
 
@@ -20,7 +21,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const body = parseBody(req.body);
-    const { text, voiceName = 'Fola' } = body;
+    const { text, voiceName = TTS_VOICE } = body;
     if (!text) return sendJson(res, 400, { error: 'Text is required for TTS.' });
 
     if (!process.env.GEMINI_API_KEY) {
@@ -45,23 +46,36 @@ export default async function handler(req: any, res: any) {
       .trim()
       .slice(0, 1600);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash-lite-tts',
-      contents: [{ role: 'user', parts: [{ text: `## Transcript:\n${cleanText}` }] }],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName || 'Fola' } } },
-      },
-    });
+    const promptText = `## Transcript:\n${cleanText}`;
 
-    const base64Audio = (response as any).candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error('TTS model did not return audio data.');
+    let base64Audio: string | undefined;
+    for (const ttsModel of TTS_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: ttsModel,
+          contents: [{ role: 'user', parts: [{ text: promptText }] }],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName || TTS_VOICE } } },
+          },
+        });
+
+        base64Audio = (response as any).candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) break;
+      } catch (ttsErr: unknown) {
+        console.warn(`TTS model ${ttsModel} call returned:`, errorToString(ttsErr));
+      }
+    }
+
+    if (!base64Audio) {
+      throw new Error('TTS models did not return audio data.');
+    }
 
     return sendJson(res, 200, {
       audioUrl: `data:audio/wav;base64,${base64Audio}`,
       base64: base64Audio,
       mimeType: 'audio/wav',
-      voice: voiceName || 'Fola',
+      voice: voiceName || TTS_VOICE,
     });
   } catch (err: unknown) {
     console.error('TTS endpoint error:', err);

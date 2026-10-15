@@ -51,6 +51,7 @@ import {
   KnowledgeSection
 } from './data/maritimeKnowledge.ts';
 import { KnowledgeBaseModal } from './components/KnowledgeBaseModal.tsx';
+import { TTS_VOICE } from './config/aiModels.ts';
 import { MaritimeToolsModal } from './components/MaritimeToolsModal.tsx';
 import { FoodPlannerModal } from './components/FoodPlannerModal.tsx';
 import { WorkspaceModal } from './components/WorkspaceModal.tsx';
@@ -565,7 +566,7 @@ export default function App() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Gemini TTS Audio Generation (gemini-3.8-flash-lite-tts with voice Fola)
+  // Gemini TTS Audio Generation (model + voice from src/config/aiModels.ts)
   const toggleSpeech = async (id: string, text: string) => {
     // If currently speaking this message, toggle pause/stop
     if (speakingMsgId === id) {
@@ -596,7 +597,7 @@ export default function App() {
         },
         body: JSON.stringify({
           text,
-          voiceName: 'Fola',
+          voiceName: TTS_VOICE,
         }),
       });
 
@@ -1250,10 +1251,10 @@ export default function App() {
                         }`}
                         title={
                           loadingTtsId === msg.id
-                            ? 'Generating audio with Gemini TTS (Fola)...'
+                            ? `Generating audio with Gemini TTS (${TTS_VOICE})...`
                             : speakingMsgId === msg.id
                             ? 'Stop reading'
-                            : 'Read aloud with Gemini TTS (Voice: Fola)'
+                            : `Read aloud with Gemini TTS (Voice: ${TTS_VOICE})`
                         }
                       >
                         {loadingTtsId === msg.id ? (

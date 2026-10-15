@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { MARITIME_SECTIONS, MARITIME_GLOSSARY, KNOWLEDGE_BASE_META } from './src/data/maritimeKnowledge.ts';
+import { CHAT_MODELS, CHAT_META_MODEL, TTS_MODELS, TTS_VOICE, supportsThinking } from './src/config/aiModels.ts';
 
 dotenv.config();
 
@@ -364,7 +365,7 @@ app.post(['/api/chat', '/api/chat/'], async (req, res) => {
     });
 
     let replyText = "";
-    const modelsToTry = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+    const modelsToTry = CHAT_MODELS;
     let lastError: any = null;
 
     for (const modelName of modelsToTry) {
@@ -378,7 +379,7 @@ app.post(['/api/chat', '/api/chat/'], async (req, res) => {
           temperature: 0.3,
         };
 
-        if (modelName.startsWith('gemini-3') || modelName.startsWith('gemini-4')) {
+        if (supportsThinking(modelName)) {
           modelConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
         }
 
@@ -405,7 +406,7 @@ app.post(['/api/chat', '/api/chat/'], async (req, res) => {
     res.json({
       text: replyText,
       meta: {
-        model: 'gemini-3.8-flash',
+        model: CHAT_META_MODEL,
         reference: 'MAR-KB-001',
         source: 'Maritime Operations Knowledge Base',
         timestamp: new Date().toISOString(),
@@ -428,10 +429,10 @@ app.get(['/api/knowledge', '/api/knowledge/'], (_req, res) => {
   });
 });
 
-// API: TTS endpoint using gemini-3.8-flash-lite-tts with voice Fola per user spec
+// API: TTS endpoint (models + voice from src/config/aiModels.ts)
 app.post(['/api/tts', '/api/tts/'], async (req, res) => {
   try {
-    const { text, voiceName = 'Fola' } = req.body;
+    const { text, voiceName = TTS_VOICE } = req.body;
     if (!text) {
       return res.status(400).json({ error: 'Text is required for TTS.' });
     }
@@ -450,35 +451,43 @@ app.post(['/api/tts', '/api/tts/'], async (req, res) => {
 
     const promptText = `## Transcript:\n${cleanText}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash-lite-tts',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: promptText }],
-        },
-      ],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voiceName || 'Fola' },
+    let base64Audio: string | undefined;
+    for (const ttsModel of TTS_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: ttsModel,
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: promptText }],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voiceName || TTS_VOICE },
+              },
+            },
           },
-        },
-      },
-    });
+        });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) break;
+      } catch (ttsErr: any) {
+        console.warn(`TTS model ${ttsModel} call returned:`, ttsErr?.message || ttsErr);
+      }
+    }
 
     if (!base64Audio) {
-      throw new Error('TTS model did not return audio data.');
+      throw new Error('TTS models did not return audio data.');
     }
 
     res.json({
       audioUrl: `data:audio/wav;base64,${base64Audio}`,
       base64: base64Audio,
       mimeType: 'audio/wav',
-      voice: voiceName || 'Fola',
+      voice: voiceName || TTS_VOICE,
     });
   } catch (err: any) {
     console.error('TTS endpoint error:', err);
