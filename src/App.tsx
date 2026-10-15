@@ -81,6 +81,68 @@ interface Message {
   time: string;
 }
 
+/** Coerce any error value into a readable string — never "[object Object]". */
+function errorToDisplayText(err: unknown): string {
+  if (!err) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error && err.message) return err.message;
+  const anyErr = err as any;
+  if (typeof anyErr?.message === 'string' && anyErr.message) return anyErr.message;
+  if (typeof anyErr?.error === 'string' && anyErr.error) return anyErr.error;
+  try {
+    const s = JSON.stringify(anyErr?.error ?? err);
+    if (s && s !== '{}' && s !== '""') return s.slice(0, 300);
+  } catch {
+    /* fall through */
+  }
+  return 'Unknown error';
+}
+
+/**
+ * Offline MAR-KB-001 fallback rendered when the chat API is unreachable,
+ * so the user still gets a grounded reference instead of a dead-end notice.
+ */
+function buildOfflineFallback(message: string): string {
+  const query = (message || '').toLowerCase();
+  if (!query.trim()) return '';
+  const scored = MARITIME_SECTIONS.map((sec) => {
+    let score = 0;
+    if (query.includes(sec.title.toLowerCase())) score += 10;
+    if (query.includes(`§${sec.number}`) || query.includes(`section ${sec.number}`)) score += 15;
+    for (const tag of sec.tags) {
+      if (query.includes(tag.toLowerCase())) score += 5;
+    }
+    const words = query.split(/\s+/).filter((w) => w.length > 3);
+    for (const w of words) {
+      if (sec.summary.toLowerCase().includes(w)) score += 2;
+      if (sec.content?.toLowerCase().includes(w)) score += 1;
+      if (sec.items?.some((it) => it.toLowerCase().includes(w))) score += 2;
+    }
+    return { sec, score };
+  }).sort((a, b) => b.score - a.score);
+  const top = scored[0]?.score > 0 ? scored[0].sec : MARITIME_SECTIONS[0];
+  const matched = MARITIME_GLOSSARY.filter((g) =>
+    new RegExp(`\\b${g.abbreviation.toLowerCase()}\\b`, 'i').test(query),
+  );
+  let out = `**Direct Operational Answer [MAR-KB-001 §${top.number} ${top.title}]:**\n${top.summary}\n`;
+  if (top.items && top.items.length > 0) {
+    out += `\n**Core Standards & Requirements [STATUTORY / REQUIRED]:**\n`;
+    top.items.slice(0, 5).forEach((it) => {
+      out += `• ${it}\n`;
+    });
+  } else if (top.content) {
+    out += `\n${top.content}\n`;
+  }
+  if (matched.length > 0) {
+    out += `\n**Relevant Terminology [MAR-KB-001 §25]:**\n`;
+    matched.slice(0, 3).forEach((g) => {
+      out += `• **${g.abbreviation}:** ${g.meaning}\n`;
+    });
+  }
+  out += `\n*Source:* [MAR-KB-001 §${top.number} ${top.title}]. Verify against the vessel's approved SMS and responsible officer.`;
+  return out;
+}
+
 const SEGMENTED_PROMPTS: Record<string, { label: string; query: string; icon: string }[]> = {
   all: [
     { label: 'Enclosed Space Entry', query: 'What are the statutory atmosphere testing limits before enclosed space entry under MAR-KB-001?', icon: '🛡️' },
@@ -426,22 +488,39 @@ export default function App() {
         }),
       });
 
+      // Read the response body exactly once — a fetch body cannot be re-read,
+      // so parse the text as JSON instead of calling res.json() then res.text().
       let data: any = null;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        const rawText = await res.text().catch(() => '') as string;
-        if (rawText && (rawText.includes('<!doctype') || rawText.includes('<html') || !res.ok)) {
-          data = {
-            text: "⚓ Maritime Operational Notice: The AI server gateway encountered a temporary routing update or proxy pause.\n\nHere is your requested query guidance from MAR-KB-001:\n* Procedure: Verify navigation, safety checksheets, or PMS schedules via the respective modal tabs ([KB], [Tools], [Food]).\n* Action: Please retry your query or check connection stability."
-          };
-        } else {
-          throw new Error('Server returned an unexpected non-JSON response.');
+      const rawBody: string = await res.text().catch(() => '');
+      if (rawBody) {
+        try {
+          data = JSON.parse(rawBody);
+        } catch {
+          data = null;
         }
       }
 
+      if (!data) {
+        if (!res.ok) {
+          const looksLikeHtml =
+            rawBody.includes('<!doctype') || rawBody.includes('<html');
+          throw new Error(
+            looksLikeHtml
+              ? `AI service endpoint not found (HTTP ${res.status}). The chat API may not be deployed — check /api/chat and GEMINI_API_KEY.`
+              : `AI service returned a non-JSON response (HTTP ${res.status}).`,
+          );
+        }
+        throw new Error('Server returned an unexpected non-JSON response.');
+      }
+
       if (!res.ok && !data?.text) {
-        throw new Error(data?.error || `Server responded with status ${res.status}`);
+        const serverErr =
+          typeof data?.error === 'string'
+            ? data.error
+            : data?.error
+              ? errorToDisplayText(data.error)
+              : '';
+        throw new Error(serverErr || `Server responded with status ${res.status}`);
       }
 
       const botReply: Message = {
@@ -454,10 +533,14 @@ export default function App() {
       setMessages((prev) => [...prev, botReply]);
     } catch (err: any) {
       console.error(err);
+      const reason = errorToDisplayText(err);
+      const fallback = buildOfflineFallback(trimmed);
       const errorMsg: Message = {
         id: `bot-err-${Date.now()}`,
         role: 'bot',
-        text: `⚠️ **Connection Notice:** Unable to reach maritime AI service (${err.message || 'Error'}). Please verify connection or retry.`,
+        text: fallback
+          ? `⚓ **MarinerAI (MAR-KB-001 offline reference):**\n\n${fallback}\n\n_Note: live AI service unreachable (${reason}). Verify connection / GEMINI_API_KEY and always confirm against the vessel's approved SMS._`
+          : `⚠️ **Connection Notice:** Unable to reach maritime AI service (${reason}). Please verify connection or retry.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);
