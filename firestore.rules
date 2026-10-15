@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.userId == userId
+        && request.resource.data.keys().hasAll(['userId', 'email'])
+        && request.resource.data.userId is string
+        && request.resource.data.email is string;
+      allow delete: if isOwner(userId);
+    }
+
+    // Chat Sessions
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid
+        && isValidId(chatId)
+        && request.resource.data.keys().hasAll(['userId', 'title'])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200;
+      allow update: if isSignedIn() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Chat Messages Subcollection
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn() 
+          && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+        allow create: if isSignedIn()
+          && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && isValidId(messageId)
+          && request.resource.data.keys().hasAll(['chatId', 'userId', 'role', 'text'])
+          && request.resource.data.chatId == chatId
+          && (request.resource.data.role == 'user' || request.resource.data.role == 'bot')
+          && request.resource.data.text is string;
+        allow update, delete: if isSignedIn() 
+          && get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // MLC 3.2 Food & Catering Plans
+    match /food_plans/{planId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isValidId(planId)
+        && request.resource.data.keys().hasAll(['userId', 'crewCount', 'durationDays'])
+        && request.resource.data.crewCount is number
+        && request.resource.data.durationDays is number;
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

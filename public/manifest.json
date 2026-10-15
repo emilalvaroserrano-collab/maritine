@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "MarinerAI - Maritime Operations Assistant",
+  "short_name": "MarinerAI",
+  "description": "Specialized offline-ready AI assistant and statutory knowledge base for seafarers, captains, and marine engineers based on MAR-KB-001.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0c0d0e",
+  "theme_color": "#0c0d0e",
+  "categories": ["productivity", "utilities", "business"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

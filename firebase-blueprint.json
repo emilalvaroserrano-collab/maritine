@@ -1,0 +1,154 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and role settings",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "selectedRole": {
+          "type": "string",
+          "description": "Active maritime rank / perspective"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp ISO"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp ISO"
+        }
+      },
+      "required": ["userId", "email"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "MarinerAI chat conversation thread",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Chat topic or first query title"
+        },
+        "role": {
+          "type": "string",
+          "description": "Maritime rank used for the session"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last message timestamp"
+        }
+      },
+      "required": ["userId", "title"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message in a chat thread",
+      "type": "object",
+      "properties": {
+        "chatId": {
+          "type": "string",
+          "description": "Parent chat thread ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner UID"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "bot"]
+        },
+        "text": {
+          "type": "string",
+          "description": "Content of the message"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["chatId", "userId", "role", "text"]
+    },
+    "FoodPlan": {
+      "title": "FoodPlan",
+      "description": "MLC 3.2 Food & Catering daily plan and budget",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner UID"
+        },
+        "vesselName": {
+          "type": "string",
+          "description": "Vessel name"
+        },
+        "crewCount": {
+          "type": "number",
+          "description": "Number of crew members"
+        },
+        "durationDays": {
+          "type": "number",
+          "description": "Voyage / planning days"
+        },
+        "budgetTotal": {
+          "type": "number",
+          "description": "Estimated total food budget"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency code"
+        },
+        "nationalities": {
+          "type": "string",
+          "description": "Crew nationalities"
+        },
+        "planJson": {
+          "type": "string",
+          "description": "Serialized meal plan breakdown"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["userId", "crewCount", "durationDays"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile collection isolated per user"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/ChatSession" },
+      "description": "User chat threads"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Subcollection of messages inside chat thread"
+    },
+    "/food_plans/{planId}": {
+      "schema": { "$ref": "#/entities/FoodPlan" },
+      "description": "Saved MLC 3.2 meal and catering plans"
+    }
+  }
+}

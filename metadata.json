@@ -1,0 +1,8 @@
+{
+  "name": "Remix MarinerAI - Maritime \u0026 Seafarer Operations Assistant",
+  "description": "Specialized AI assistant and knowledge base for seafarers, mariners, captains, and engineers based on MAR-KB-001.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
